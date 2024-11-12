@@ -1,14 +1,8 @@
-"""LED BLE integration light platform."""
-
 from __future__ import annotations
-
 import logging
-from typing import Any
+from typing import Any, Optional
 
-from homeassistant.components.bluetooth.passive_update_coordinator import (
-    PassiveBluetoothCoordinatorEntity,
-)
-from homeassistant.components.light import ATTR_BRIGHTNESS, ColorMode, LightEntity
+from homeassistant.components.light import ATTR_BRIGHTNESS, ATTR_RGB_COLOR, ATTR_COLOR_TEMP, ColorMode, LightEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_ON
 from homeassistant.core import HomeAssistant
@@ -24,110 +18,84 @@ from .models import ChihirosData
 
 _LOGGER = logging.getLogger(__name__)
 
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up the light platform for LEDBLE."""
+    """Set up the light platform for Chihiros LED with dynamic channel detection."""
     chihiros_data: ChihirosData = hass.data[DOMAIN][entry.entry_id]
-    _LOGGER.debug("Setup chihiros entry: %s", chihiros_data.device.address)
-    for color in chihiros_data.device.colors:
-        _LOGGER.debug(
-            "Setup chihiros light entity: %s - %s", chihiros_data.device.address, color
-        )
-        async_add_entities(
-            [
-                ChihirosLightEntity(
-                    chihiros_data.coordinator,
-                    chihiros_data.device,
-                    entry,
-                    color=color,
-                )
-            ]
-        )
+    _LOGGER.debug("Setting up Chihiros RGBW light with dynamic channel support")
+    async_add_entities([ChihirosLightEntity(chihiros_data.coordinator, chihiros_data.device, entry)])
 
+class ChihirosLightEntity(LightEntity, RestoreEntity):
+    """Representation of a Chihiros light device with dynamic channel support."""
 
-class ChihirosLightEntity(
-    PassiveBluetoothCoordinatorEntity[ChihirosDataUpdateCoordinator],
-    LightEntity,
-    RestoreEntity,
-):
-    """Representation of Chihiros device."""
-
-    _attr_assumed_state = True
-    _attr_should_poll = False
-    _attr_supported_color_modes = {ColorMode.BRIGHTNESS}
-    _attr_color_mode = ColorMode.BRIGHTNESS
-
-    def __init__(
-        self,
-        coordinator: ChihirosDataUpdateCoordinator,
-        chihiros_device: BaseDevice,
-        config_entry: ConfigEntry,
-        color: str,
-    ) -> None:
-        """Initialise the entity."""
-        super().__init__(coordinator)
-        self._device = chihiros_device
+    def __init__(self, coordinator: ChihirosDataUpdateCoordinator, device: BaseDevice, config_entry: ConfigEntry) -> None:
+        """Initialize the light entity."""
+        super().__init__()
+        self._device = device
         self._address = coordinator.address
-        self._color = color
-
-        self._attr_name = f"{self._device.name} {self._color}"
-        self._attr_unique_id = f"{self._address}_{self._color}"
-        self._attr_color = self._color
-        self._attr_extra_state_attributes = {"color": self._color}
-
-        model_name: str = self._device.model_name
+        self._attr_name = f"{self._device.name} Light"
+        self._attr_unique_id = f"{self._address}_light"
         self._attr_device_info = DeviceInfo(
             connections={(dr.CONNECTION_BLUETOOTH, self._address)},
             manufacturer=MANUFACTURER,
-            model=model_name,
+            model=self._device.model_name,
             name=self._device.name,
         )
+        self._channels = len(device.colors)  # Number of light channels
+        self._set_supported_color_modes()
 
-    async def async_added_to_hass(self) -> None:
-        """Handle entity about to be added to hass event."""
-        _LOGGER.debug("Called async_added_to_hass: %s", self.name)
-        await super().async_added_to_hass()
-        if last_state := await self.async_get_last_state():
-            self._attr_is_on = last_state.state == STATE_ON
-            self._attr_brightness = last_state.attributes.get("brightness")
+    def _set_supported_color_modes(self):
+        """Set supported color modes based on channel count."""
+        if self._channels == 2:
+            self._attr_supported_color_modes = {ColorMode.COLOR_TEMP}
+            self._attr_color_mode = ColorMode.COLOR_TEMP
+        elif self._channels == 3:
+            self._attr_supported_color_modes = {ColorMode.RGB}
+            self._attr_color_mode = ColorMode.RGB
+        elif self._channels == 4:
+            self._attr_supported_color_modes = {ColorMode.RGBW}
+            self._attr_color_mode = ColorMode.RGBW
+        else:
+            _LOGGER.warning("Unsupported channel count: %s", self._channels)
 
     @property
     def brightness(self) -> int | None:
-        """Return the brightness property."""
         return self._attr_brightness
 
     @property
-    def color_mode(self) -> str | None:
-        """Return the color mode of the light."""
-        return self._attr_color_mode
+    def rgb_color(self) -> tuple[int, int, int] | None:
+        return self._attr_rgb_color
+
+    @property
+    def color_temp(self) -> int | None:
+        return self._attr_color_temp
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Instruct the light to turn on."""
-        if ATTR_BRIGHTNESS in kwargs:
-            brightness = int((kwargs[ATTR_BRIGHTNESS] / 255) * 100)
-            _LOGGER.debug("Turning on: %s to %s", self.name, brightness)
-            # TODO: handle error and availability False
-            await self._device.set_color_brightness(brightness, self._color)
-            self._attr_brightness = kwargs[ATTR_BRIGHTNESS]
-        else:
-            _LOGGER.debug("Turning on: %s", self.name)
-            await self._device.set_color_brightness(100, self._color)
+        """Turn on the light with dynamic channel handling."""
         self._attr_is_on = True
-        self._attr_available = True
+        if ATTR_BRIGHTNESS in kwargs:
+            self._attr_brightness = kwargs[ATTR_BRIGHTNESS]
+
+        if self._channels == 2 and ATTR_COLOR_TEMP in kwargs:
+            self._attr_color_temp = kwargs[ATTR_COLOR_TEMP]
+            await self._device.set_color_temp(self._attr_color_temp)
+
+        elif self._channels == 3 and ATTR_RGB_COLOR in kwargs:
+            self._attr_rgb_color = kwargs[ATTR_RGB_COLOR]
+            await self._device.set_rgb(self._attr_rgb_color, self._attr_brightness)
+
+        elif self._channels == 4 and ATTR_RGB_COLOR in kwargs:
+            self._attr_rgb_color = kwargs[ATTR_RGB_COLOR]
+            await self._device.set_rgbw(self._attr_rgb_color, self._attr_brightness)
+
         self.schedule_update_ha_state()
-        _LOGGER.debug("Turned on: %s", self.name)
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Instruct the light to turn off."""
-        _LOGGER.debug("Turning off: %s", self.name)
-        # TODO handle error and availability False
-        await self._device.set_color_brightness(0, self._color)
+        """Turn off the light."""
+        _LOGGER.debug("Turning off light: %s", self.name)
+        await self._device.turn_off()
         self._attr_is_on = False
-        self._attr_brightness = 0
-        self._attr_available = True
         self.schedule_update_ha_state()
-        _LOGGER.debug("Turned off: %s", self.name)
