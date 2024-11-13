@@ -13,6 +13,7 @@ from .base_device import BaseDevice
 from .c2 import CII
 from .c2rgb import CIIRGB
 from .commander1 import Commander1
+from .commander4 import Commander4
 from .fallback import Fallback
 from .tiny_terrarium_egg import TinyTerrariumEgg
 from .universal_wrgb import UniversalWRGB
@@ -22,14 +23,17 @@ from .wrgb2_slim import WRGBIISlim
 
 CODE2MODEL = {}
 for name, obj in inspect.getmembers(sys.modules[__name__]):
+    #print(name, obj)
     if inspect.isclass(obj) and issubclass(obj, BaseDevice):
         for model_code in obj._model_codes:
             CODE2MODEL[model_code] = obj
 
-
 def get_model_class_from_name(device_name: str) -> Callable[[BLEDevice], BaseDevice]:
     """Get device class name from device name."""
-    return CODE2MODEL.get(device_name[:-12], Fallback)
+    print(device_name)
+    data = CODE2MODEL.get(device_name[:-12], Fallback)
+    print(data)
+    return data
 
 
 async def get_device_from_address(device_address: str) -> BaseDevice:
@@ -48,6 +52,7 @@ __all__ = [
     "TinyTerrariumEgg",
     "AII",
     "Commander1",
+    "Commander4"
     "WRGBII",
     "WRGBIIPro",
     "WRGBIISlim",

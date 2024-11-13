@@ -42,12 +42,14 @@ def list_devices(timeout: Annotated[int, typer.Option()] = 5) -> None:
     """
     table = Table("Name", "Address", "Model")
     discovered_devices = asyncio.run(BleakScanner.discover(timeout=timeout))
+    #print(discovered_devices)
     for device in discovered_devices:
         model_name = "???"
         if device.name is not None:
             model_class = get_model_class_from_name(device.name)
-            if model_class.model_code:  # type: ignore
-                model_name = model_class.model_name  # type: ignore
+            #print(model_class, model_name)
+            if model_class.model_code:
+                model_name = model_class.model_name
         table.add_row(device.name, device.address, model_name)
     print("Discovered the following devices:")
     print(table)
