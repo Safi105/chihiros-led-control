@@ -48,8 +48,8 @@ def list_devices(timeout: Annotated[int, typer.Option()] = 5) -> None:
         if device.name is not None:
             model_class = get_model_class_from_name(device.name)
             #print(model_class, model_name)
-            if model_class.model_code:
-                model_name = model_class.model_name
+            if model_class._model_codes:
+                model_name = model_class._model_name
         table.add_row(device.name, device.address, model_name)
     print("Discovered the following devices:")
     print(table)
