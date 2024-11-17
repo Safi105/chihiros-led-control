@@ -92,7 +92,30 @@ def set_rgb_brightness(
     """Set brightness of a RGB light."""
     _run_device_func(device_address, brightness=brightness)
 
+@app.command()
+def set_color_temp(
+    device_address: str, color_temp: Annotated[int, typer.Argument(min=2000, max=6500)]
+) -> None:
+    """Set the color temperature of the light."""
+    _run_device_func(device_address, color_temp=color_temp)
 
+
+@app.command()
+def set_rgbw_brightness(
+    device_address: str,
+    brightness: Annotated[tuple[int, int, int, int], typer.Argument()],
+) -> None:
+    """Set the brightness of an RGBW light."""
+    _run_device_func(device_address, brightness=brightness)
+
+
+@app.command()
+def set_white_brightness(
+    device_address: str, brightness: Annotated[int, typer.Argument(min=0, max=100)]
+) -> None:
+    """Set brightness of the white channel in an RGBW light."""
+    _run_device_func(device_address, brightness=brightness, channel="white")
+    
 @app.command()
 def add_setting(
     device_address: str,
