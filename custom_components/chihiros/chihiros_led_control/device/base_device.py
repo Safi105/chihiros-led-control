@@ -2,6 +2,11 @@
 
 import asyncio
 import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 from abc import ABC, ABCMeta
 from datetime import datetime
 
@@ -392,17 +397,19 @@ class BaseDevice(ABC):
             )
             self._logger.debug("%s: Connected; RSSI: %s", self.name, self.rssi)
             resolved = self._resolve_characteristics(client.services)
-            if not resolved:
+            #if not resolved:
                 # Try to handle services failing to load
-                resolved = self._resolve_characteristics(await client.get_services())
-
+                #resolved = self._resolve_characteristics(await client.get_services())
+                
+            #print(self._client, client)
             self._client = client
             self._reset_disconnect_timer()
 
             self._logger.debug(
                 "%s: Subscribe to notifications; RSSI: %s", self.name, self.rssi
             )
-            await client.start_notify(self._read_char, self._notification_handler)  # type: ignore
+
+            await client.start_notify(self._read_char, self._notification_handler) 
 
     def _reset_disconnect_timer(self) -> None:
         """Reset disconnect timer."""
